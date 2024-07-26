@@ -319,7 +319,7 @@ def evaluate(loader, model, save = False, best_acc = 0.0):
             print(f'model saved to {save_path}!')
     return acc
 
-def test(epoch, net1, net2):
+def test(epoch, net1, net2, test_loader, test_log):
     net1.eval()
     net2.eval()
     correct = 0
@@ -344,10 +344,11 @@ def test(epoch, net1, net2):
     acc = 100. * correct / total
     acc2 = 100. * correct2 / total
     accmean_ori = 100. * correctmean_ori / total
-    print("| Test Epoch #%d\t Acc Net1: %.2f%%, Acc Net2: %.2f%% Acc Mean: %.2f%%\n" % (epoch, acc, acc2,  accmean_ori))
-    test_log.write('Epoch:%d   Accuracy:%.2f\n' % (epoch, acc))
+    message = "| Test Epoch #%d\t Acc Net1: %.2f%%, Acc Net2: %.2f%% Acc Mean: %.2f%%\n" % (epoch, acc, acc2, accmean_ori)
+    print(message)
+    test_log.write(message)
     test_log.flush()
-
+    return accmean_ori
 
 def eval_train(model, all_loss, rho, num_class):
     w = linear_rampup2(epoch, args.warmup_ep)
@@ -476,12 +477,22 @@ if __name__ == '__main__':
         else:
             pass
 
-    stats_log = open('./checkpoint/%s_%s_%s' % (args.dataset, args.noise_type, args.num_epochs) + '_stats.txt', 'w')
-    test_log = open('./checkpoint/%s_%s_%s' % (args.dataset, args.noise_type, args.num_epochs) + '_acc.txt', 'w')
+    curr_time = time.strftime("%m%d%H%M", time.localtime())
+    directory = os.path.join('checkpoint', f'{curr_time}_{args.dataset}_{args.noise_mode}_{args.noise_rate}')
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
+    stats_name = f'{args.dataset}_{args.noise_type}_{args.num_epochs}_stats_{curr_time}.txt'
+    test_name = f'{args.dataset}_{args.noise_type}_{args.num_epochs}_acc_{curr_time}.txt'
+    stats_log = open(os.path.join(directory, stats_name), 'w')
+    test_log = open(os.path.join(directory, test_name), 'w')
+    test_log.write(str(args) + '\n')
+    # test_log.write(cluster_file + '\n')
 
     warm_up = args.pretrain_ep
     # unique file name to record the synthetic noise for CIFAR-10/100
-    time = str(datetime.now())[-6:]
+    time_digits = str(datetime.now())[-6:]
+    noise_file = os.path.join(directory, f'{args.noise_type}_{time_digits}.json')
     loader = dataloader.cifarn_dataloader(
         args.dataset,
         noise_type=args.noise_type,
@@ -491,10 +502,11 @@ if __name__ == '__main__':
         num_workers=8,
         root_dir=args.data_path,
         log=stats_log,
-        noise_file="%s/noise_file/%s_%s.json" % (args.data_path, args.noise_type, time),
+        noise_file=noise_file,
         r=args.noise_rate,
         noise_mode=args.noise_mode,
     )
+    test_log.write(noise_file + '\n')
 
     print('| Building net')
     dualnet = create_model()
@@ -523,6 +535,7 @@ if __name__ == '__main__':
 
     for epoch in range(args.num_epochs + 1):
         adjust_learning_rate(args, optimizer1, epoch)
+        
         if epoch < warm_up:
             warmup_trainloader, noisy_labels = loader.run('warmup')
             print('Warmup Net1')
@@ -534,5 +547,33 @@ if __name__ == '__main__':
             pred1 = (prob1 > args.p_threshold)
             total_trainloader, noisy_labels = loader.run('train', pred1, prob1, prob2)  # co-divide
             pi1,pi2,pi1_unrel,pi2_unrel = train(epoch,dualnet.net1, dualnet.net2, optimizer1, total_trainloader,pi1,pi2,pi1_unrel,pi2_unrel) 
-        test(epoch, dualnet.net1, dualnet.net2)
-        torch.save(dualnet, f"./{args.dataset}_{args.noise_type}best.pth.tar")
+        
+        acc = test(epoch, dualnet.net1, dualnet.net2, test_loader, test_log)
+
+        if acc >= best_acc:
+            best_acc = acc
+            torch.save(dualnet, os.path.join(directory, f"{args.dataset}_{args.noise_type}best.pth.tar"))
+            print(f'Model saved!')
+
+        # save all information for resume training
+        # pi1, pi2, pi1_unrel, pi2_unrel
+        # best_acc, epoch, args,
+        # dualnet, optimizer1, stats_log, test_log, noise_file
+        save_filename = f'latest_model_{curr_time}.pth.tar'
+        torch.save(
+            {
+                'model': dualnet,
+                'optimizer': optimizer1,
+                'args': args,
+                'epoch': epoch,
+                'best_acc': best_acc,
+                'pi1': pi1,
+                'pi2': pi2,
+                'pi1_unrel': pi1_unrel,
+                'pi2_unrel': pi2_unrel,
+                'curr_time': curr_time,
+                'noise_file': noise_file,
+            },
+            os.path.join(directory, save_filename))
+
+        torch.cuda.empty_cache()
