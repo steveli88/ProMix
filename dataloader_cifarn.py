@@ -3,14 +3,13 @@ import torch
 import copy
 import random
 import json
-from data.utils import download_url, check_integrity
 from utils.randaug import *
 from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as transforms
 import numpy as np
 from PIL import Image
 from math import exp, sqrt, log10
-from Asymmetric_Noise import *
+from Asymmetric_Noise import noisify_cifar100_asymmetric
 
 
 def unpickle(file):
