@@ -351,43 +351,38 @@ def test(epoch, net1, net2, test_loader, test_log):
     test_log.flush()
     return accmean_ori
 
-def eval_train(model, all_loss, rho, num_class):
+def eval_train(model, rho, num_class, eval_loader, args, all_loss):
     w = linear_rampup2(epoch, args.warmup_ep)
     model.eval()
     losses = torch.zeros(50000)
-    targets_list = torch.zeros(50000)
-    prediction_list = torch.zeros(50000)
-    num_class = 0
+    targets_list = torch.zeros(50000, dtype=torch.long)
     with torch.no_grad():
         for batch_idx, (inputs, targets, index) in enumerate(eval_loader):
             inputs, targets = inputs.cuda(), targets.cuda()
             outputs = model(inputs)
-            num_class = outputs.shape[1]
             loss = CE(outputs, targets)
-            targets_cpu = targets.cpu()
-            for b in range(inputs.size(0)):
-                losses[index[b]] = loss[b]
-                targets_list[index[b]] = targets_cpu[b]
-                
+            losses[index] = loss.cpu()
+            targets_list[index] = targets.cpu()
+
     #class-wise small-loss selection (CSS for base selection set)
     losses = (losses - losses.min()) / (losses.max() - losses.min())
-    all_loss.append(losses)
-    input_loss = losses.reshape(-1, 1)
+    losses = losses.detach()
+    # # Todo remove the gradient information
+    # all_loss.append(losses)
+    # # todo consider average loss when using low loss criterion
+    # average_losses = torch.mean(torch.stack(all_loss[-5:]), dim=0)
+
     prob = np.zeros(targets_list.shape[0])
-    idx_chosen_sm = []
-    min_len = 1e10
-    for j in range(num_class):
-        indices = np.where(targets_list.cpu().numpy()==j)[0]
-        if len(indices) == 0:
-            continue
-        bs_j = targets_list.shape[0] * (1. / num_class)
-        pseudo_loss_vec_j = losses[indices]
-        sorted_idx_j = pseudo_loss_vec_j.sort()[1].cpu().numpy()
-        partition_j = max(min(int(math.ceil(bs_j*rho)), len(indices)), 1)
-        idx_chosen_sm.append(indices[sorted_idx_j[:partition_j]])
-        min_len = min(min_len, partition_j)
-    idx_chosen_sm = np.concatenate(idx_chosen_sm)
-    prob[idx_chosen_sm] = 1
+
+    for c in range(num_class):
+        indices_class = (targets_list == c).nonzero().squeeze()
+        input_loss_class = torch.index_select(losses, 0, indices_class)
+        # todo adjust number of labels controlled here
+        num_sample_per_class = targets_list.shape[0] * (1. / num_class)
+        k = max(min(int(math.ceil(num_sample_per_class * rho)), len(indices_class)), 1)
+        _, low_loss_indices_class = input_loss_class.topk(k, dim=0, largest=False)
+        prob[indices_class[low_loss_indices_class.squeeze()]] = 1
+
     return prob, all_loss
 
 class NegEntropy(object):
@@ -534,8 +529,8 @@ if __name__ == '__main__':
     eval_loader, noise_or_not = loader.run('eval_train')
     test_loader = loader.run('test')
 
-    all_loss = [[], []]  
-
+    all_loss = []
+    rho = args.rho_start
     best_acc = 0
     # uniform initialization of distribution estimation
     pi1 = bias_initial(args.num_class)
@@ -552,8 +547,8 @@ if __name__ == '__main__':
             warmup(epoch, dualnet.net1, dualnet.net2, optimizer1, warmup_trainloader)
         else:
             rho = args.rho_start + (args.rho_end - args.rho_start) * linear_rampup2(epoch, args.warmup_ep)
-            prob1, all_loss[0] = eval_train(dualnet.net1, all_loss[0], rho, args.num_class)
-            prob2, all_loss[0] = eval_train(dualnet.net2, all_loss[0], rho, args.num_class)
+            prob1, all_loss = eval_train(dualnet.net1, rho, args.num_class, eval_loader, args, all_loss)
+            prob2, all_loss = eval_train(dualnet.net2, rho, args.num_class, eval_loader, args, all_loss)
             pred1 = (prob1 > args.p_threshold)
             total_trainloader, noisy_labels = loader.run('train', pred1, prob1, prob2)  # co-divide
             pi1,pi2,pi1_unrel,pi2_unrel = train(epoch, dualnet.net1, dualnet.net2, optimizer1, total_trainloader, pi1, pi2, pi1_unrel, pi2_unrel) 
