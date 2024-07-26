@@ -15,75 +15,8 @@ from utils.utils import *
 from utils.fmix import *
 from sklearn.mixture import GaussianMixture
 from datetime import datetime
+import time
 
-parser = argparse.ArgumentParser(description='PyTorch CIFAR Training')
-parser.add_argument('--batch_size', default=256, type=int, help='train batchsize')
-parser.add_argument('--lr', '--learning_rate', default=0.05, type=float, help='initial learning rate')
-parser.add_argument('-lr_decay_rate', type=float, default=0.1, help='decay rate for learning rate')
-parser.add_argument('--cosine', action='store_true', default=False,
-                    help='use cosine lr schedule')
-parser.add_argument('--noise_type', type=str, help='clean, aggre, worst, rand1, rand2, rand3, clean100, noisy100',
-                    default='clean')
-parser.add_argument('--noise_path', type=str, help='path of CIFAR-10_human.pt', default=None)
-parser.add_argument('--p_threshold', default=0.5, type=float, help='clean probability threshold')
-parser.add_argument('--T', default=0.5, type=float, help='sharpening temperature')
-parser.add_argument('--num_epochs', default=600, type=int)
-parser.add_argument('--seed', default=123)
-parser.add_argument('--gpuid', default=0, type=int)
-parser.add_argument('--num_class', default=100, type=int)
-parser.add_argument('--data_path', default=None, type=str, help='path to dataset')
-parser.add_argument('--dataset', default='cifar10', type=str)
-parser.add_argument('--is_human', action='store_true', default=False)
-parser.add_argument('--rho_range', default='0.2,0.6', type=str,
-                    help='ratio of selecting clean labels (rho)')
-parser.add_argument('--tau', default=0.99, type=float,
-                    help='high-confidence selection threshold')
-parser.add_argument('--pretrain_ep', default=10, type=int, help = 'warm-up training epoch')
-parser.add_argument('--warmup_ep', default=50, type=int, help = 'parameter ramp-up epoch')
-parser.add_argument('--low_conf_del', action='store_true', default=False)
-parser.add_argument('--threshold', default=0.9, type=float, help = 'threshold of label guessing')
-parser.add_argument('--fmix', action='store_true', default=False)
-parser.add_argument('--start_expand', default=250, type=int)               
-parser.add_argument('--debias_output', default=0.8, type=float,
-                    help='debias strength for loss calculation')
-parser.add_argument('--debias_pl', default=0.8, type=float,
-                    help='debias strength for pseudo-label generation')
-parser.add_argument('--noise_mode', default='cifarn', type=str,help='cifarn, sym, asym')
-parser.add_argument('--noise_rate', default=0.2, type=float,
-                    help='noise rate for synthetic noise')
-parser.add_argument('--bias_m', default=0.9999, type=float,
-                    help='moving average parameter of bias estimation')
-args = parser.parse_args()
-[args.rho_start, args.rho_end] = [float(item) for item in args.rho_range.split(',')]
-print(args)
-
-torch.cuda.set_device(args.gpuid)
-random.seed(args.seed)
-torch.manual_seed(args.seed)
-torch.cuda.manual_seed_all(args.seed)
-
-# Hyper Parameters
-noise_type_map = {'clean': 'clean_label', 'worst': 'worse_label', 'aggre': 'aggre_label', 'rand1': 'random_label1',
-                  'rand2': 'random_label2', 'rand3': 'random_label3', 'clean100': 'clean_label',
-                  'noisy100': 'noisy_label'}
-args.noise_type = noise_type_map[args.noise_type]
-# load dataset
-# please change it to your own datapath
-if args.data_path is None:
-    if args.dataset == 'cifar10':
-        args.data_path = './data/cifar-10'
-    elif args.dataset == 'cifar100':
-        args.data_path = './data/cifar-100'
-    else:
-        pass
-# please change it to your own datapath for CIFAR-N
-if args.noise_path is None:
-    if args.dataset == 'cifar10':
-        args.noise_path = './data/CIFAR-10_human.pt'
-    elif args.dataset == 'cifar100':
-        args.noise_path = './data/CIFAR-100_human.pt'
-    else:
-        pass
 
 def label_guessing(idx_chosen, w_x, batch_size, score1, score2, match):
     w_x2 = w_x.clone()
@@ -466,55 +399,140 @@ def create_model():
     model = model.cuda()
     return model
 
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='PyTorch CIFAR Training')
+    parser.add_argument('--batch_size', default=256, type=int, help='train batchsize')
+    parser.add_argument('--lr', '--learning_rate', default=0.05, type=float, help='initial learning rate')
+    parser.add_argument('-lr_decay_rate', type=float, default=0.1, help='decay rate for learning rate')
+    parser.add_argument('--cosine', action='store_true', default=False,
+                        help='use cosine lr schedule')
+    parser.add_argument('--noise_type', type=str, help='clean, aggre, worst, rand1, rand2, rand3, clean100, noisy100',
+                        default='clean')
+    parser.add_argument('--noise_path', type=str, help='path of CIFAR-10_human.pt', default=None)
+    parser.add_argument('--p_threshold', default=0.5, type=float, help='clean probability threshold')
+    parser.add_argument('--T', default=0.5, type=float, help='sharpening temperature')
+    parser.add_argument('--num_epochs', default=600, type=int)
+    parser.add_argument('--seed', default=123)
+    parser.add_argument('--gpuid', default=0, type=int)
+    parser.add_argument('--num_class', default=100, type=int)
+    parser.add_argument('--data_path', default=None, type=str, help='path to dataset')
+    parser.add_argument('--dataset', default='cifar10', type=str)
+    parser.add_argument('--is_human', action='store_true', default=False)
+    parser.add_argument('--rho_range', default='0.2,0.6', type=str,
+                        help='ratio of selecting clean labels (rho)')
+    parser.add_argument('--tau', default=0.99, type=float,
+                        help='high-confidence selection threshold')
+    parser.add_argument('--pretrain_ep', default=10, type=int, help = 'warm-up training epoch')
+    parser.add_argument('--warmup_ep', default=50, type=int, help = 'parameter ramp-up epoch')
+    parser.add_argument('--low_conf_del', action='store_true', default=False)
+    parser.add_argument('--threshold', default=0.9, type=float, help = 'threshold of label guessing')
+    parser.add_argument('--fmix', action='store_true', default=False)
+    parser.add_argument('--start_expand', default=250, type=int)               
+    parser.add_argument('--debias_output', default=0.8, type=float,
+                        help='debias strength for loss calculation')
+    parser.add_argument('--debias_pl', default=0.8, type=float,
+                        help='debias strength for pseudo-label generation')
+    parser.add_argument('--noise_mode', default='cifarn', type=str,help='cifarn, sym, asym')
+    parser.add_argument('--noise_rate', default=0.2, type=float,
+                        help='noise rate for synthetic noise')
+    parser.add_argument('--bias_m', default=0.9999, type=float,
+                        help='moving average parameter of bias estimation')
+    args = parser.parse_args()
+    [args.rho_start, args.rho_end] = [float(item) for item in args.rho_range.split(',')]
+    print(args)
 
-stats_log = open('./checkpoint/%s_%s_%s' % (args.dataset, args.noise_type, args.num_epochs) + '_stats.txt', 'w')
-test_log = open('./checkpoint/%s_%s_%s' % (args.dataset, args.noise_type, args.num_epochs) + '_acc.txt', 'w')
+    torch.cuda.set_device(args.gpuid)
+    random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
 
-warm_up = args.pretrain_ep
-#unique file name to record the synthetic noise for CIFAR-10/100
-time = str(datetime.now())[-6:]
-loader = dataloader.cifarn_dataloader(args.dataset, noise_type=args.noise_type, noise_path=args.noise_path,
-                                      is_human=args.is_human, batch_size=args.batch_size, num_workers=8, \
-                                      root_dir=args.data_path, log=stats_log,
-                                      noise_file='%s/noise_file/%s_%s.json' % (args.data_path,args.noise_type,time),r = args.noise_rate , noise_mode = args.noise_mode)
+    # Hyper Parameters
+    noise_type_map = {
+        "clean": "clean_label",
+        "worst": "worse_label",
+        "aggre": "aggre_label",
+        "rand1": "random_label1",
+        "rand2": "random_label2",
+        "rand3": "random_label3",
+        "clean100": "clean_label",
+        "noisy100": "noisy_label",
+    }
+    args.noise_type = noise_type_map[args.noise_type]
+    # load dataset
+    # please change it to your own datapath
+    if args.data_path is None:
+        if args.dataset == 'cifar10':
+            args.data_path = './data/cifar-10'
+        elif args.dataset == 'cifar100':
+            args.data_path = './data/cifar-100'
+        else:
+            pass
+    # please change it to your own datapath for CIFAR-N
+    if args.noise_path is None:
+        if args.dataset == 'cifar10':
+            args.noise_path = './data/CIFAR-10_human.pt'
+        elif args.dataset == 'cifar100':
+            args.noise_path = './data/CIFAR-100_human.pt'
+        else:
+            pass
 
-print('| Building net')
-dualnet = create_model()
-cudnn.benchmark = True
+    stats_log = open('./checkpoint/%s_%s_%s' % (args.dataset, args.noise_type, args.num_epochs) + '_stats.txt', 'w')
+    test_log = open('./checkpoint/%s_%s_%s' % (args.dataset, args.noise_type, args.num_epochs) + '_acc.txt', 'w')
 
-conf_penalty = NegEntropy()
-optimizer1 = optim.SGD([{'params': dualnet.net1.parameters()},
-                        {'params': dualnet.net2.parameters()}
-                        ], lr=args.lr, momentum=0.9, weight_decay=5e-4)
+    warm_up = args.pretrain_ep
+    # unique file name to record the synthetic noise for CIFAR-10/100
+    time = str(datetime.now())[-6:]
+    loader = dataloader.cifarn_dataloader(
+        args.dataset,
+        noise_type=args.noise_type,
+        noise_path=args.noise_path,
+        is_human=args.is_human,
+        batch_size=args.batch_size,
+        num_workers=8,
+        root_dir=args.data_path,
+        log=stats_log,
+        noise_file="%s/noise_file/%s_%s.json" % (args.data_path, args.noise_type, time),
+        r=args.noise_rate,
+        noise_mode=args.noise_mode,
+    )
 
-fmix = FMix()
-CE = nn.CrossEntropyLoss(reduction='none')
-CEloss = nn.CrossEntropyLoss()
-CEsoft = CE_Soft_Label()
-eval_loader, noise_or_not = loader.run('eval_train')
-test_loader = loader.run('test')
+    print('| Building net')
+    dualnet = create_model()
+    cudnn.benchmark = True
 
-all_loss = [[], []]  
+    conf_penalty = NegEntropy()
+    optimizer1 = optim.SGD([{'params': dualnet.net1.parameters()},
+                            {'params': dualnet.net2.parameters()}
+                            ], lr=args.lr, momentum=0.9, weight_decay=5e-4)
 
-best_acc = 0
-#uniform initialization of distribution estimation
-pi1 = bias_initial(args.num_class)
-pi2 = bias_initial(args.num_class)
-pi1_unrel = bias_initial(args.num_class)
-pi2_unrel = bias_initial(args.num_class)
+    fmix = FMix()
+    CE = nn.CrossEntropyLoss(reduction='none')
+    CEloss = nn.CrossEntropyLoss()
+    CEsoft = CE_Soft_Label()
+    eval_loader, noise_or_not = loader.run('eval_train')
+    test_loader = loader.run('test')
 
-for epoch in range(args.num_epochs + 1):
-    adjust_learning_rate(args, optimizer1, epoch)
-    if epoch < warm_up:
-        warmup_trainloader, noisy_labels = loader.run('warmup')
-        print('Warmup Net1')
-        warmup(epoch, dualnet.net1, dualnet.net2, optimizer1, warmup_trainloader)
-    else:
-        rho = args.rho_start + (args.rho_end - args.rho_start) * linear_rampup2(epoch, args.warmup_ep)
-        prob1, all_loss[0] = eval_train(dualnet.net1, all_loss[0], rho, args.num_class)
-        prob2, all_loss[0] = eval_train(dualnet.net2, all_loss[0], rho, args.num_class)
-        pred1 = (prob1 > args.p_threshold)
-        total_trainloader, noisy_labels = loader.run('train', pred1, prob1, prob2)  # co-divide
-        pi1,pi2,pi1_unrel,pi2_unrel = train(epoch,dualnet.net1, dualnet.net2, optimizer1, total_trainloader,pi1,pi2,pi1_unrel,pi2_unrel) 
-    test(epoch, dualnet.net1, dualnet.net2)
-    torch.save(dualnet, f"./{args.dataset}_{args.noise_type}best.pth.tar")
+    all_loss = [[], []]  
+
+    best_acc = 0
+    # uniform initialization of distribution estimation
+    pi1 = bias_initial(args.num_class)
+    pi2 = bias_initial(args.num_class)
+    pi1_unrel = bias_initial(args.num_class)
+    pi2_unrel = bias_initial(args.num_class)
+
+    for epoch in range(args.num_epochs + 1):
+        adjust_learning_rate(args, optimizer1, epoch)
+        if epoch < warm_up:
+            warmup_trainloader, noisy_labels = loader.run('warmup')
+            print('Warmup Net1')
+            warmup(epoch, dualnet.net1, dualnet.net2, optimizer1, warmup_trainloader)
+        else:
+            rho = args.rho_start + (args.rho_end - args.rho_start) * linear_rampup2(epoch, args.warmup_ep)
+            prob1, all_loss[0] = eval_train(dualnet.net1, all_loss[0], rho, args.num_class)
+            prob2, all_loss[0] = eval_train(dualnet.net2, all_loss[0], rho, args.num_class)
+            pred1 = (prob1 > args.p_threshold)
+            total_trainloader, noisy_labels = loader.run('train', pred1, prob1, prob2)  # co-divide
+            pi1,pi2,pi1_unrel,pi2_unrel = train(epoch,dualnet.net1, dualnet.net2, optimizer1, total_trainloader,pi1,pi2,pi1_unrel,pi2_unrel) 
+        test(epoch, dualnet.net1, dualnet.net2)
+        torch.save(dualnet, f"./{args.dataset}_{args.noise_type}best.pth.tar")
