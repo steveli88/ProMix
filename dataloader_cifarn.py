@@ -9,13 +9,15 @@ from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as transforms
 import numpy as np
 from PIL import Image
+from math import exp, sqrt, log10
+from Asymmetric_Noise import *
+
 
 def unpickle(file):
     import _pickle as cPickle
     with open(file, 'rb') as fo:
         dict = cPickle.load(fo, encoding='latin1')
     return dict
-
 
 class cifarn_dataset(Dataset):
     def __init__(self,  dataset,  noise_type, noise_path, root_dir, transform, mode, transform_s=None, is_human=True, noise_file='',
@@ -71,9 +73,11 @@ class cifarn_dataset(Dataset):
 
             # if noise_type is not None:
             if os.path.exists(noise_file):
+                print('Load noisy labels from file.')
                 noise_label = json.load(open(noise_file,"r"))
                 self.train_noisy_labels = noise_label
                 self.noise_or_not = np.transpose(self.train_noisy_labels) != np.transpose(self.train_labels)
+                print('The new label accuracy:', 1-sum(self.noise_or_not)/len(self.noise_or_not))
             else:    #inject noise   
                 if self.noise_mode=='sym' or self.noise_mode =='asym':
                     noise_label = []
@@ -81,19 +85,23 @@ class cifarn_dataset(Dataset):
                     random.shuffle(idx)
                     num_noise = int(self.r*50000)            
                     noise_idx = idx[:num_noise]
-                    for i in range(50000):
-                        if i in noise_idx:
-                            if self.noise_mode=='sym':
-                                if dataset=='cifar10': 
-                                    noiselabel = random.randint(0,9)
-                                elif dataset=='cifar100':    
-                                    noiselabel = random.randint(0,99)
-                                noise_label.append(noiselabel)
-                            elif self.noise_mode=='asym':   
-                                noiselabel = self.transition[train_label[i]]
-                                noise_label.append(noiselabel)                    
-                        else:    
-                            noise_label.append(train_label[i])   
+                    if self.noise_mode=='asym' and dataset=='cifar100':   
+                        noise_label, _ =  noisify_cifar100_asymmetric(train_label, self.r)
+                        noise_label = noise_label.tolist()
+                    else:                       
+                        for i in range(50000):
+                            if i in noise_idx:
+                                if self.noise_mode=='sym':
+                                    if dataset=='cifar10': 
+                                        noiselabel = random.randint(0,9)
+                                    elif dataset=='cifar100':    
+                                        noiselabel = random.randint(0,99)
+                                    noise_label.append(noiselabel)
+                                elif self.noise_mode=='asym':   
+                                    noiselabel = self.transition[train_label[i]]
+                                    noise_label.append(noiselabel)                    
+                            else:    
+                                noise_label.append(train_label[i])   
                     self.train_noisy_labels = noise_label
                     self.noise_or_not = np.transpose(self.train_noisy_labels) != np.transpose(self.train_labels)
                     print("save noisy labels to %s ..."%noise_file)        
@@ -102,8 +110,11 @@ class cifarn_dataset(Dataset):
                 elif self.noise_mode == 'cifarn':
                     if noise_type != 'clean':
                         # Load human noisy labels
-                        train_noisy_labels = self.load_label()
-                        self.train_noisy_labels = train_noisy_labels.tolist()
+                        if 'json' in self.noise_path:
+                            self.train_noisy_labels = json.load(open(self.noise_path, "r"))
+                        else:
+                            train_noisy_labels = self.load_label()
+                            self.train_noisy_labels = train_noisy_labels.tolist()
                         self.print_wrapper(f'noisy labels loaded from {self.noise_path}')
                     
                         for i in range(len(self.train_noisy_labels)):
@@ -114,8 +125,15 @@ class cifarn_dataset(Dataset):
                         self.noise_or_not = np.transpose(self.train_noisy_labels) != np.transpose(self.train_labels)
                         self.actual_noise_rate = np.sum(self.noise_or_not) / 50000
                         self.print_wrapper('over all noise rate is ', self.actual_noise_rate)
-                    noise_label = train_noisy_labels
+                    noise_label = self.train_noisy_labels
                 
+                elif self.noise_mode == 'dp':
+                    noise_label = self._perturb_labels_k_randomized_response(self.train_labels)
+                    self.train_noisy_labels = noise_label
+                    self.noise_or_not = np.transpose(self.train_noisy_labels) != np.transpose(self.train_labels)
+                    print('The new label accuracy:', 1-sum(self.noise_or_not)/len(self.noise_or_not))
+                    print("save dp noisy labels to %s ..."%noise_file)
+                    json.dump(noise_label,open(noise_file,"w"))
 
             if self.mode == 'all_lab':
                 self.probability = probability
@@ -141,6 +159,14 @@ class cifarn_dataset(Dataset):
                 self.noise_label = [noise_label[i] for i in pred_idx]
                 self.print_wrapper("%s data has a size of %d" % (self.mode, len(self.noise_label)))
         self.print_show = False
+
+    def _perturb_labels_k_randomized_response(self, labels):
+        y_onehot = torch.nn.functional.one_hot(torch.tensor(labels), num_classes=self.nb_classes)
+        y_onehot = y_onehot * (exp(self.eps)-1)
+        probs = torch.ones(len(labels), self.nb_classes)
+        probs = probs + y_onehot
+        m = torch.distributions.categorical.Categorical(probs)
+        return m.sample().tolist()    
     
     def print_wrapper(self, *args, **kwargs):
         if self.print_show:
@@ -222,84 +248,135 @@ class cifarn_dataloader():
         self.root_dir = root_dir
         self.log = log
         self.noise_file = noise_file
-        if self.dataset == 'cifar10':
-            self.transform_train = transforms.Compose([
-                                        transforms.RandomHorizontalFlip(),
-                                        transforms.RandomCrop(32, padding=4),
-                                        transforms.ToTensor(), 
-                                        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261))])
+        if self.dataset == "cifar10":
+            self.transform_train = transforms.Compose(
+                [
+                    transforms.RandomHorizontalFlip(),
+                    transforms.RandomCrop(32, padding=4),
+                    transforms.ToTensor(),
+                    transforms.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261)),
+                ]
+            )
             self.transform_train_s = copy.deepcopy(self.transform_train)
-            self.transform_train_s.transforms.insert(0, RandomAugment(3,5))
-            self.transform_test = transforms.Compose([
-                transforms.ToTensor(),
-                transforms.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261)),
-            ])
-        elif self.dataset == 'cifar100':
-            self.transform_train = transforms.Compose([
-                transforms.RandomCrop(32, padding=4),
-                transforms.RandomHorizontalFlip(),
-                transforms.ToTensor(),
-                transforms.Normalize((0.507, 0.487, 0.441), (0.267, 0.256, 0.276)),
-            ])
+            self.transform_train_s.transforms.insert(0, RandomAugment(3, 5))
+            self.transform_test = transforms.Compose(
+                [
+                    transforms.ToTensor(),
+                    transforms.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261)),
+                ]
+            )
+        elif self.dataset == "cifar100":
+            self.transform_train = transforms.Compose(
+                [
+                    transforms.RandomCrop(32, padding=4),
+                    transforms.RandomHorizontalFlip(),
+                    transforms.ToTensor(),
+                    transforms.Normalize((0.507, 0.487, 0.441), (0.267, 0.256, 0.276)),
+                ]
+            )
             self.transform_train_s = copy.deepcopy(self.transform_train)
-            self.transform_train_s.transforms.insert(0, RandomAugment(3,5))
-            self.transform_test = transforms.Compose([
-                transforms.ToTensor(),
-                transforms.Normalize((0.507, 0.487, 0.441), (0.267, 0.256, 0.276)),
-            ])
+            self.transform_train_s.transforms.insert(0, RandomAugment(3, 5))
+            self.transform_test = transforms.Compose(
+                [
+                    transforms.ToTensor(),
+                    transforms.Normalize((0.507, 0.487, 0.441), (0.267, 0.256, 0.276)),
+                ]
+            )
         self.print_show = True
 
-    def run(self, mode, pred=[], prob=[],prob2=[]):
-        if mode == 'warmup':
-            all_dataset = cifarn_dataset(dataset=self.dataset, noise_type=self.noise_type, noise_path=self.noise_path,
-                                         is_human=self.is_human, root_dir=self.root_dir, transform=self.transform_train,
-                                         transform_s=self.transform_train_s, mode="all",
-                                         noise_file=self.noise_file, print_show=self.print_show, r=self.r,noise_mode=self.noise_mode)
+    def run(self, mode, pred=[], prob=[], prob2=[]):
+        if mode == "warmup":
+            all_dataset = cifarn_dataset(
+                dataset=self.dataset,
+                noise_type=self.noise_type,
+                noise_path=self.noise_path,
+                is_human=self.is_human,
+                root_dir=self.root_dir,
+                transform=self.transform_train,
+                transform_s=self.transform_train_s,
+                mode="all",
+                noise_file=self.noise_file,
+                print_show=self.print_show,
+                r=self.r,
+                noise_mode=self.noise_mode,
+            )
             trainloader = DataLoader(
                 dataset=all_dataset,
                 batch_size=self.batch_size,
                 shuffle=True,
-                num_workers=self.num_workers)
+                num_workers=self.num_workers,
+            )
             self.print_show = False
             # never show noisy rate again
             return trainloader, all_dataset.train_noisy_labels
 
-        elif mode == 'train':
-            labeled_dataset = cifarn_dataset(dataset=self.dataset, noise_type=self.noise_type,
-                                             noise_path=self.noise_path, is_human=self.is_human,
-                                             root_dir=self.root_dir, transform=self.transform_train, mode="all_lab",
-                                             noise_file=self.noise_file, pred=pred, probability=prob,probability2=prob2, log=self.log,
-                                             transform_s=self.transform_train_s, r=self.r,noise_mode=self.noise_mode)
+        elif mode == "train":
+            labeled_dataset = cifarn_dataset(
+                dataset=self.dataset,
+                noise_type=self.noise_type,
+                noise_path=self.noise_path,
+                is_human=self.is_human,
+                root_dir=self.root_dir,
+                transform=self.transform_train,
+                mode="all_lab",
+                noise_file=self.noise_file,
+                pred=pred,
+                probability=prob,
+                probability2=prob2,
+                log=self.log,
+                transform_s=self.transform_train_s,
+                r=self.r,
+                noise_mode=self.noise_mode,
+            )
             labeled_trainloader = DataLoader(
                 dataset=labeled_dataset,
                 batch_size=self.batch_size,
                 shuffle=True,
                 num_workers=self.num_workers,
                 pin_memory=True,
-                drop_last=True)
+                drop_last=True,
+            )
 
             return labeled_trainloader, labeled_dataset.train_noisy_labels
 
-        elif mode == 'test':
-            test_dataset = cifarn_dataset(dataset=self.dataset, noise_type=self.noise_type, noise_path=self.noise_path,
-                                          is_human=self.is_human,
-                                          root_dir=self.root_dir, transform=self.transform_test, mode='test', r=self.r,noise_mode=self.noise_mode)
+        elif mode == "test":
+            test_dataset = cifarn_dataset(
+                dataset=self.dataset,
+                noise_type=self.noise_type,
+                noise_path=self.noise_path,
+                is_human=self.is_human,
+                root_dir=self.root_dir,
+                transform=self.transform_test,
+                mode="test",
+                r=self.r,
+                noise_mode=self.noise_mode,
+            )
             test_loader = DataLoader(
                 dataset=test_dataset,
                 batch_size=self.batch_size,
                 shuffle=False,
-                num_workers=self.num_workers)
+                num_workers=self.num_workers,
+            )
             return test_loader
 
-        elif mode == 'eval_train':
-            eval_dataset = cifarn_dataset(dataset=self.dataset, noise_type=self.noise_type, noise_path=self.noise_path,
-                                          is_human=self.is_human,
-                                          root_dir=self.root_dir, transform=self.transform_test, mode='all',
-                                          noise_file=self.noise_file, r=self.r,noise_mode=self.noise_mode)
+        elif mode == "eval_train":
+            eval_dataset = cifarn_dataset(
+                dataset=self.dataset,
+                noise_type=self.noise_type,
+                noise_path=self.noise_path,
+                is_human=self.is_human,
+                root_dir=self.root_dir,
+                transform=self.transform_test,
+                mode="all",
+                noise_file=self.noise_file,
+                r=self.r,
+                noise_mode=self.noise_mode,
+            )
             eval_loader = DataLoader(
                 dataset=eval_dataset,
                 batch_size=self.batch_size,
                 shuffle=False,
-                num_workers=self.num_workers)
+                num_workers=self.num_workers,
+            )
             return eval_loader, eval_dataset.noise_or_not
         # never print again

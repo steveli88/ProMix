@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import torch.backends.cudnn as cudnn
+import torchvision
 import random
 import os
 import argparse
@@ -463,9 +464,15 @@ if __name__ == '__main__':
     # please change it to your own datapath
     if args.data_path is None:
         if args.dataset == 'cifar10':
-            args.data_path = './data/cifar-10'
+            args.data_path = 'data/cifar-10-batches-py'
+            args.num_class = 10
+            torchvision.datasets.CIFAR10('data',train=True, download=True)
+            torchvision.datasets.CIFAR10('data',train=False, download=True)
         elif args.dataset == 'cifar100':
-            args.data_path = './data/cifar-100'
+            args.data_path = 'data/cifar-100-python'
+            args.num_class = 100
+            torchvision.datasets.CIFAR100('data',train=True, download=True)
+            torchvision.datasets.CIFAR100('data',train=False, download=True)
         else:
             pass
     # please change it to your own datapath for CIFAR-N
@@ -513,9 +520,12 @@ if __name__ == '__main__':
     cudnn.benchmark = True
 
     conf_penalty = NegEntropy()
-    optimizer1 = optim.SGD([{'params': dualnet.net1.parameters()},
-                            {'params': dualnet.net2.parameters()}
-                            ], lr=args.lr, momentum=0.9, weight_decay=5e-4)
+    optimizer1 = optim.SGD(
+        [{"params": dualnet.net1.parameters()}, {"params": dualnet.net2.parameters()}],
+        lr=args.lr,
+        momentum=0.9,
+        weight_decay=5e-4,
+    )
 
     fmix = FMix()
     CE = nn.CrossEntropyLoss(reduction='none')
@@ -535,7 +545,7 @@ if __name__ == '__main__':
 
     for epoch in range(args.num_epochs + 1):
         adjust_learning_rate(args, optimizer1, epoch)
-        
+
         if epoch < warm_up:
             warmup_trainloader, noisy_labels = loader.run('warmup')
             print('Warmup Net1')
@@ -546,8 +556,8 @@ if __name__ == '__main__':
             prob2, all_loss[0] = eval_train(dualnet.net2, all_loss[0], rho, args.num_class)
             pred1 = (prob1 > args.p_threshold)
             total_trainloader, noisy_labels = loader.run('train', pred1, prob1, prob2)  # co-divide
-            pi1,pi2,pi1_unrel,pi2_unrel = train(epoch,dualnet.net1, dualnet.net2, optimizer1, total_trainloader,pi1,pi2,pi1_unrel,pi2_unrel) 
-        
+            pi1,pi2,pi1_unrel,pi2_unrel = train(epoch, dualnet.net1, dualnet.net2, optimizer1, total_trainloader, pi1, pi2, pi1_unrel, pi2_unrel) 
+
         acc = test(epoch, dualnet.net1, dualnet.net2, test_loader, test_log)
 
         if acc >= best_acc:
