@@ -636,9 +636,9 @@ if __name__ == '__main__':
     training_records = None
 
     clean_sample_1 = np.zeros((50000, args.num_epochs+1), dtype=int)
-    # clean_sample_2 = np.zeros((50000, args.num_epochs+1), dtype=int)
+    clean_sample_2 = np.zeros((50000, args.num_epochs+1), dtype=int)
     clean_sample_cluster_1 = np.zeros((50000, args.num_epochs+1), dtype=int)
-    # clean_sample_cluster_2 = np.zeros((50000, args.num_epochs+1), dtype=int)
+    clean_sample_cluster_2 = np.zeros((50000, args.num_epochs+1), dtype=int)
 
     for epoch in range(args.num_epochs + 1):
         adjust_learning_rate(args, optimizer1, epoch)
