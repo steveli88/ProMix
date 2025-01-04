@@ -583,7 +583,7 @@ if __name__ == '__main__':
     stats_log = open(os.path.join(directory, stats_name), 'w')
     test_log = open(os.path.join(directory, test_name), 'w')
     test_log.write(str(args) + '\n')
-    # test_log.write(cluster_file + '\n')
+    test_log.write(cluster_file + '\n')
 
     warm_up = args.pretrain_ep
     # unique file name to record the synthetic noise for CIFAR-10/100
@@ -635,10 +635,10 @@ if __name__ == '__main__':
 
     training_records = None
 
-    clean_sample_1 = np.zeros((50000, args.num_epochs), dtype=int)
-    clean_sample_2 = np.zeros((50000, args.num_epochs), dtype=int)
-    clean_sample_cluster_1 = np.zeros((50000, args.num_epochs), dtype=int)
-    clean_sample_cluster_2 = np.zeros((50000, args.num_epochs), dtype=int)
+    clean_sample_1 = np.zeros((50000, args.num_epochs+1), dtype=int)
+    # clean_sample_2 = np.zeros((50000, args.num_epochs+1), dtype=int)
+    clean_sample_cluster_1 = np.zeros((50000, args.num_epochs+1), dtype=int)
+    # clean_sample_cluster_2 = np.zeros((50000, args.num_epochs+1), dtype=int)
 
     for epoch in range(args.num_epochs + 1):
         adjust_learning_rate(args, optimizer1, epoch)
