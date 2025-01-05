@@ -148,9 +148,10 @@ class animal10n_dataloader():
 
         self.transform_train = transforms.Compose(
             [
-                transforms.RandomCrop(32, padding=4),
+                # transforms.RandomCrop(32, padding=4),
                 transforms.RandomHorizontalFlip(),
                 transforms.ToTensor(),
+                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
             ]
         )
         self.transform_train_s = copy.deepcopy(self.transform_train)
@@ -158,6 +159,7 @@ class animal10n_dataloader():
         self.transform_test = transforms.Compose(
             [
                 transforms.ToTensor(),
+                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
             ]
         )
         self.print_show = True
