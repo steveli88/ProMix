@@ -63,9 +63,14 @@ class VGG(nn.Module):
         x = self.features(x)
         x = self.avgpool(x)
         x = torch.flatten(x, 1)
-        c=self.classifier1(x)
+
+        # todo why this delete?
+        # c=self.classifier1(x)
+        # x = self.classifier(x)
+        # return x,c
+
         x = self.classifier(x)
-        return x,c
+        return x
 
     def _initialize_weights(self) -> None:
         for m in self.modules():
