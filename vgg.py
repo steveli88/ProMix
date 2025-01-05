@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from typing import Union, List, Dict, Any, cast
+import torch.nn.functional as F
 
 try:
     from torch.hub import load_state_dict_from_url
@@ -45,21 +46,30 @@ class VGG(nn.Module):
             nn.Linear(4096, 4096),
             nn.ReLU(True),
             nn.Dropout(),
-            nn.Linear(4096, num_classes),
         )
-        self.classifier1 = nn.Sequential(
-            nn.Linear(512 * 7 * 7, 4096),
-            nn.ReLU(True),
-            nn.Dropout(),
-            nn.Linear(4096, 4096),
-            nn.ReLU(True),
-            nn.Dropout(),
-            nn.Linear(4096, 1),
-        )
+        self.linear = nn.Linear(4096, num_classes)
+        # self.classifier1 = nn.Sequential(
+        #     nn.Linear(512 * 7 * 7, 4096),
+        #     nn.ReLU(True),
+        #     nn.Dropout(),
+        #     nn.Linear(4096, 4096),
+        #     nn.ReLU(True),
+        #     nn.Dropout(),
+        #     nn.Linear(4096, 1),
+        # )
         if init_weights:
             self._initialize_weights()
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        dim_in = 4096
+        feat_dim = 128
+        self.head = nn.Sequential(
+                nn.Linear(dim_in, dim_in),
+                nn.ReLU(inplace=True),
+                nn.Linear(dim_in, feat_dim)
+            )
+        self.pseudo_linear = nn.Linear(dim_in, num_classes)
+
+    def forward(self, x, train=False, use_ph=False):
         x = self.features(x)
         x = self.avgpool(x)
         x = torch.flatten(x, 1)
@@ -69,8 +79,22 @@ class VGG(nn.Module):
         # x = self.classifier(x)
         # return x,c
 
-        x = self.classifier(x)
-        return x
+        out = self.classifier(x)
+        out_linear = self.linear(out)
+
+        if train:
+            feat_c = self.head(out)
+            if use_ph:
+                out_linear_debias = self.pseudo_linear(out)
+                return out_linear, out_linear_debias, F.normalize(feat_c, dim=1)
+            else:
+                return out_linear, F.normalize(feat_c, dim=1)
+        else:
+            if use_ph:
+                out_linear_debias = self.pseudo_linear(out)
+                return out_linear, out_linear_debias
+            else:
+                return out_linear
 
     def _initialize_weights(self) -> None:
         for m in self.modules():
