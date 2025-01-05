@@ -401,7 +401,7 @@ class NegEntropy(object):
         return torch.mean(torch.sum(probs.log() * probs, dim=1))
 
 def create_model():
-    model = DualNet(args.num_class)
+    model = DualNet(args.num_class, args.dataset)
     model = model.cuda()
     return model
 

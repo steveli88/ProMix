@@ -5,13 +5,17 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import Parameter
-
+from vgg import vgg19_bn
 
 class DualNet(nn.Module):
-    def __init__(self, num_class):
+    def __init__(self, num_class, dataset='cifar10'):
         super().__init__()
-        self.net1 = ResNet18(num_classes=num_class)
-        self.net2 = ResNet18(num_classes=num_class)
+        if dataset == 'cifar10' or dataset == 'cifar100':
+            self.net1 = ResNet18(num_classes=num_class)
+            self.net2 = ResNet18(num_classes=num_class)
+        elif dataset == 'animal10n':
+            self.net1 = vgg19_bn(num_classes=num_class, pretrained=False)
+            self.net2 = vgg19_bn(num_classes=num_class, pretrained=False)
 
     def forward(self,x):
         outputs_1 = self.net1(x)
