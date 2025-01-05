@@ -484,7 +484,7 @@ def low_loss_sample_stats(
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PyTorch CIFAR Training')
-    parser.add_argument('--batch_size', default=64, type=int, help='train batchsize')
+    parser.add_argument('--batch_size', default=256, type=int, help='train batchsize')
     parser.add_argument('--lr', '--learning_rate', default=0.05, type=float, help='initial learning rate')
     parser.add_argument('-lr_decay_rate', type=float, default=0.1, help='decay rate for learning rate')
     parser.add_argument('--cosine', action='store_true', default=True,
