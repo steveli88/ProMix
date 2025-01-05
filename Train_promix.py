@@ -635,10 +635,10 @@ if __name__ == '__main__':
 
     training_records = None
 
-    clean_sample_1 = np.zeros((50000, args.num_epochs+1), dtype=int)
-    clean_sample_2 = np.zeros((50000, args.num_epochs+1), dtype=int)
-    clean_sample_cluster_1 = np.zeros((50000, args.num_epochs+1), dtype=int)
-    clean_sample_cluster_2 = np.zeros((50000, args.num_epochs+1), dtype=int)
+    clean_sample_1 = np.zeros((len(eval_loader.dataset), args.num_epochs+1), dtype=int)
+    # clean_sample_2 = np.zeros((len(eval_loader.dataset), args.num_epochs+1), dtype=int)
+    clean_sample_cluster_1 = np.zeros((len(eval_loader.dataset), args.num_epochs+1), dtype=int)
+    # clean_sample_cluster_2 = np.zeros((len(eval_loader.dataset), args.num_epochs+1), dtype=int)
 
     for epoch in range(args.num_epochs + 1):
         adjust_learning_rate(args, optimizer1, epoch)
@@ -655,8 +655,8 @@ if __name__ == '__main__':
 
             clean_sample_1[:, epoch] = prob1
             np.save(os.path.join(directory, 'clean_sample_1.npy'), clean_sample_1)
-            clean_sample_2[:, epoch] = prob2
-            np.save(os.path.join(directory, 'clean_sample_2.npy'), clean_sample_2)       
+            # clean_sample_2[:, epoch] = prob2
+            # np.save(os.path.join(directory, 'clean_sample_2.npy'), clean_sample_2)       
 
             prob1_before_expansion, prob2_before_expansion = prob1, prob2            
 
@@ -682,8 +682,8 @@ if __name__ == '__main__':
 
                 clean_sample_cluster_1[:, epoch] = prob1
                 np.save(os.path.join(directory, 'clean_sample_cluster_1.npy'), clean_sample_cluster_1)
-                clean_sample_cluster_2[:, epoch] = prob2
-                np.save(os.path.join(directory, 'clean_sample_cluster_2.npy'), clean_sample_cluster_2)
+                # clean_sample_cluster_2[:, epoch] = prob2
+                # np.save(os.path.join(directory, 'clean_sample_cluster_2.npy'), clean_sample_cluster_2)
 
             total_trainloader, noisy_labels = loader.run('train', pred1, prob1, prob2)  # co-divide
 
