@@ -494,7 +494,7 @@ if __name__ == '__main__':
     parser.add_argument('--noise_path', type=str, help='path of CIFAR-10_human.pt', default=None)
     parser.add_argument('--p_threshold', default=0.5, type=float, help='clean probability threshold')
     parser.add_argument('--T', default=0.5, type=float, help='sharpening temperature')
-    parser.add_argument('--num_epochs', default=600, type=int)
+    parser.add_argument('--num_epochs', default=300, type=int)
     parser.add_argument('--seed', default=123)
     parser.add_argument('--gpuid', default=0, type=int)
     parser.add_argument('--num_class', default=10, type=int)
@@ -599,7 +599,7 @@ if __name__ == '__main__':
         weight_decay=5e-4,
     )
 
-    fmix = FMix()
+    fmix = FMix(size=(64, 64)) # modified for VGG19
     CE = nn.CrossEntropyLoss(reduction='none')
     CEloss = nn.CrossEntropyLoss()
     CEsoft = CE_Soft_Label()
