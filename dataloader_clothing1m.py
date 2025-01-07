@@ -8,6 +8,8 @@ from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as transforms
 import numpy as np
 from PIL import Image
+from math import exp, sqrt, log10
+from Asymmetric_Noise import noisify_cifar100_asymmetric
 
 
 def unpickle(file):
@@ -16,10 +18,11 @@ def unpickle(file):
         dict = cPickle.load(fo, encoding='latin1')
     return dict
 
-class animal10n_dataset(Dataset):
-    def __init__(self,  dataset,  noise_type, noise_path, root_dir, transform, mode, transform_s=None, is_human=True, noise_file='',
-                 pred=[], probability=[],probability2=[] ,log='', print_show=False, r =0.2 , noise_mode = 'cifarn'):
-        assert dataset == 'animal10n'
+
+class clothing1m_dataset(Dataset):
+    def __init__(self, dataset, noise_type, noise_path, root_dir, transform, mode, transform_s=None,
+                 noise_file='', pred=[], probability=[], probability2=[], log='', print_show=False, r=0.2, noise_mode='cifarn'):
+        assert dataset == 'clothing1m'
         self.dataset = dataset
         self.transform = transform
         self.transform_s = transform_s
@@ -29,19 +32,40 @@ class animal10n_dataset(Dataset):
         self.print_show = print_show
         self.noise_mode = noise_mode
         self.r = r
-        self.nb_classes = 10
 
-        train_folder = os.path.join(root_dir, 'training')
-        test_folder = os.path.join(root_dir, 'testing')
-        train_files = os.listdir(train_folder)
-        test_files = os.listdir(test_folder)
+        self.root_dir = root_dir
+        self.train_data_path = []
+        self.train_labels = []
+        self.test_data_path = []
+        self.test_labels = []
+
+        with open('%s/noisy_label_kv.txt' % root_dir, 'r') as f:
+            lines = f.read().splitlines()
+            for l in lines:
+                entry = l.split()
+                img_path = '%s/' % root_dir + entry[0][7:]
+                self.train_data_path.append(img_path)
+                self.train_labels.append(int(entry[1]))
+        with open('%s/clean_label_kv.txt' % root_dir, 'r') as f:
+            lines = f.read().splitlines()
+            for l in lines:
+                entry = l.split()
+                img_path = '%s/' % root_dir + entry[0][7:]
+                self.test_data_path.append(img_path)
+                self.test_labels.append(int(entry[1]))
+
+        self.nb_classes = 14
 
         if self.mode == 'test':
-            self.test_data = [np.asarray(Image.open(os.path.join(test_folder, i))) for i in test_files]
-            self.test_label = [int(i.split('_')[0]) for i in test_files]
+            self.test_imgs = []
+            with open('%s/clean_test_key_list.txt'%root_dir,'r') as f:
+                lines = f.read().splitlines()
+                for l in lines:
+                    entry = l.split()
+                    img_path = '%s/' % root_dir + entry[0][7:]
+                    self.test_data_path.append(img_path)
+                    self.test_labels.append(int(entry[1]))
         else:
-            self.train_data = [np.asarray(Image.open(os.path.join(train_folder, i))) for i in train_files]
-            self.train_labels = [int(i.split('_')[0]) for i in train_files]
             # dummy place holder
             self.noise_or_not = np.transpose(self.train_labels) != np.transpose(self.train_labels)
 
@@ -55,12 +79,9 @@ class animal10n_dataset(Dataset):
                 if self.mode == "labeled":
                     pred_idx = pred.nonzero()[0]
                     self.probability = [probability[i] for i in pred_idx]
-                    clean = (np.array(self.noise_label) == np.array(self.train_labels))
-                    log.write('Numer of labeled samples:%d   AUC (not computed):%.3f\n' % (pred.sum(), 0))
-                    log.flush()
                 elif self.mode == "unlabeled":
                     pred_idx = (1 - pred).nonzero()[0]
-                self.train_data = self.train_data[pred_idx]
+                self.train_data_path = self.train_data_path[pred_idx]
                 self.noise_label = [self.noise_label[i] for i in pred_idx]
                 self.print_wrapper("%s data has a size of %d" % (self.mode, len(self.noise_label)))
         self.print_show = False
@@ -71,26 +92,31 @@ class animal10n_dataset(Dataset):
 
     def __getitem__(self, index):
         if self.mode == 'labeled':
-            img, target, prob = self.train_data[index], self.noise_label[index], self.probability[index]
+            img_path, target, prob = self.train_data_path[index], self.noise_label[index], self.probability[index]
+            img = np.asarray(Image.open(os.path.join(self.root_dir, img_path)))
             img = Image.fromarray(img)
             img1 = self.transform(img)
             img2 = self.transform_s(img)
             return img1, img2, target, prob
         elif self.mode == 'unlabeled':
-            img = self.train_data[index]
+            img_path = self.train_data_path[index]
+            img = np.asarray(Image.open(os.path.join(self.root_dir, img_path)))
             img = Image.fromarray(img)
             img1 = self.transform(img)
             img2 = self.transform_s(img)
             return img1, img2
         elif self.mode == 'all_lab':
-            img, target, prob, prob2 = self.train_data[index], self.noise_label[index], self.probability[index],self.probability2[index]
+            img_path, target, prob, prob2 = self.train_data_path[index], self.noise_label[index], self.probability[index], \
+            self.probability2[index]
             true_labels = self.train_labels[index]
+            img = np.asarray(Image.open(os.path.join(self.root_dir, img_path)))
             img = Image.fromarray(img)
             img1 = self.transform(img)
             img2 = self.transform_s(img)
-            return img1, img2, target, prob,prob2,true_labels, index
+            return img1, img2, target, prob, prob2, true_labels, index
         elif self.mode == 'all':
-            img, target = self.train_data[index], self.noise_label[index]
+            img_path, target = self.train_data_path[index], self.noise_label[index]
+            img = np.asarray(Image.open(os.path.join(self.root_dir, img_path)))
             img = Image.fromarray(img)
             if self.transform_s is not None:
                 img1 = self.transform(img)
@@ -100,64 +126,64 @@ class animal10n_dataset(Dataset):
                 img = self.transform(img)
                 return img, target, index
         elif self.mode == 'all2':
-            img, target = self.train_data[index], self.noise_label[index]
+            img_path, target = self.train_data_path[index], self.noise_label[index]
+            img = np.asarray(Image.open(os.path.join(self.root_dir, img_path)))
             img = Image.fromarray(img)
             img1 = self.transform(img)
             img2 = self.transform_s(img)
             return img1, img2, target, index
         elif self.mode == 'test':
-            img, target = self.test_data[index], self.test_label[index]
+            img_path, target = self.test_data_path[index], self.test_labels[index]
+            img = np.asarray(Image.open(os.path.join(self.root_dir, img_path)))
             img = Image.fromarray(img)
             img = self.transform(img)
             return img, target
 
     def __len__(self):
         if self.mode != 'test':
-            return len(self.train_data)
+            return len(self.train_data_path)
         else:
-            return len(self.test_data)
+            return len(self.test_data_path)
 
 
-class animal10n_dataloader():
-    def __init__(self, dataset, noise_type, noise_path, is_human, batch_size, num_workers, root_dir, log,
+class clothing1m_dataloader():
+    def __init__(self, dataset, noise_type, noise_path, batch_size, num_workers, root_dir, log,
                  noise_file='', noise_mode='cifarn', r=0.2):
         self.r = r
         self.noise_mode = noise_mode
         self.dataset = dataset
         self.noise_type = noise_type
         self.noise_path = noise_path
-        self.is_human = is_human
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.root_dir = root_dir
         self.log = log
         self.noise_file = noise_file
 
-        self.transform_train = transforms.Compose(
-            [
-                # transforms.RandomCrop(32, padding=4),
-                transforms.RandomHorizontalFlip(),
-                transforms.ToTensor(),
-                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-            ]
-        )
+        self.transform_train = transforms.Compose([
+            transforms.Resize(256),
+            transforms.RandomCrop(224),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize((0.6959, 0.6537, 0.6371), (0.3113, 0.3192, 0.3214)),
+        ])
         self.transform_train_s = copy.deepcopy(self.transform_train)
         self.transform_train_s.transforms.insert(0, RandomAugment(3, 5))
-        self.transform_test = transforms.Compose(
-            [
-                transforms.ToTensor(),
-                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-            ]
-        )
+        self.transform_test = transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize((0.6959, 0.6537, 0.6371), (0.3113, 0.3192, 0.3214)),
+        ])
+
         self.print_show = True
 
     def run(self, mode, pred=[], prob=[], prob2=[]):
         if mode == "warmup":
-            all_dataset = animal10n_dataset(
+            all_dataset = clothing1m_dataset(
                 dataset=self.dataset,
                 noise_type=self.noise_type,
                 noise_path=self.noise_path,
-                is_human=self.is_human,
                 root_dir=self.root_dir,
                 transform=self.transform_train,
                 transform_s=self.transform_train_s,
@@ -175,14 +201,13 @@ class animal10n_dataloader():
             )
             self.print_show = False
             # never show noisy rate again
-            return trainloader, all_dataset.train_labels
+            return trainloader, all_dataset.train_noisy_labels
 
         elif mode == "train":
-            labeled_dataset = animal10n_dataset(
+            labeled_dataset = clothing1m_dataset(
                 dataset=self.dataset,
                 noise_type=self.noise_type,
                 noise_path=self.noise_path,
-                is_human=self.is_human,
                 root_dir=self.root_dir,
                 transform=self.transform_train,
                 mode="all_lab",
@@ -204,14 +229,13 @@ class animal10n_dataloader():
                 drop_last=True,
             )
 
-            return labeled_trainloader, labeled_dataset.train_labels
+            return labeled_trainloader, labeled_dataset.train_noisy_labels
 
         elif mode == "test":
-            test_dataset = animal10n_dataset(
+            test_dataset = clothing1m_dataset(
                 dataset=self.dataset,
                 noise_type=self.noise_type,
                 noise_path=self.noise_path,
-                is_human=self.is_human,
                 root_dir=self.root_dir,
                 transform=self.transform_test,
                 mode="test",
@@ -227,11 +251,10 @@ class animal10n_dataloader():
             return test_loader
 
         elif mode == "eval_train":
-            eval_dataset = animal10n_dataset(
+            eval_dataset = clothing1m_dataset(
                 dataset=self.dataset,
                 noise_type=self.noise_type,
                 noise_path=self.noise_path,
-                is_human=self.is_human,
                 root_dir=self.root_dir,
                 transform=self.transform_test,
                 mode="all",
@@ -246,4 +269,4 @@ class animal10n_dataloader():
                 num_workers=self.num_workers,
             )
             return eval_loader, eval_dataset.noise_or_not
-        # never print again
+
