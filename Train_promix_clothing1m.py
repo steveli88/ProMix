@@ -10,7 +10,7 @@ import random
 import os
 import argparse
 import numpy as np
-import dataloader_animal10n as dataloader
+import dataloader_clothing1m as dataloader
 from model import *
 from utils.utils import *
 from utils.fmix import *
@@ -485,7 +485,7 @@ def low_loss_sample_stats(
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PyTorch CIFAR Training')
     parser.add_argument('--batch_size', default=256, type=int, help='train batchsize')
-    parser.add_argument('--lr', '--learning_rate', default=0.05, type=float, help='initial learning rate')
+    parser.add_argument('--lr', '--learning_rate', default=0.002, type=float, help='initial learning rate')
     parser.add_argument('-lr_decay_rate', type=float, default=0.1, help='decay rate for learning rate')
     parser.add_argument('--cosine', action='store_true', default=True,
                         help='use cosine lr schedule')
@@ -494,7 +494,7 @@ if __name__ == '__main__':
     parser.add_argument('--noise_path', type=str, help='path of CIFAR-10_human.pt', default=None)
     parser.add_argument('--p_threshold', default=0.5, type=float, help='clean probability threshold')
     parser.add_argument('--T', default=0.5, type=float, help='sharpening temperature')
-    parser.add_argument('--num_epochs', default=300, type=int)
+    parser.add_argument('--num_epochs', default=80, type=int)
     parser.add_argument('--seed', default=123)
     parser.add_argument('--gpuid', default=0, type=int)
     parser.add_argument('--num_class', default=10, type=int)
@@ -510,7 +510,7 @@ if __name__ == '__main__':
     parser.add_argument('--low_conf_del', action='store_true', default=False)
     parser.add_argument('--threshold', default=0.9, type=float, help = 'threshold of label guessing')
     parser.add_argument('--fmix', action='store_true', default=False)
-    parser.add_argument('--start_expand', default=250, type=int)
+    parser.add_argument('--start_expand', default=40, type=int)
     parser.add_argument('--debias_output', default=0.8, type=float,
                         help='debias strength for loss calculation')
     parser.add_argument('--debias_pl', default=0.8, type=float,
@@ -522,6 +522,7 @@ if __name__ == '__main__':
                         help='moving average parameter of bias estimation')
     parser.add_argument('--eps', default=1, type=float, help='Epsilon')
     parser.add_argument('--cluster_prior_epoch', default=100, type=int)
+    # todo get cluster file and change this
     parser.add_argument('--cluster_file', default='features_clusters_animal10_dinov2_vitl14_reg_f1024_c1000.pt',
                         type=str, help='path to cluster file')
     parser.add_argument('--num_cluster', default=1000, type=int)
@@ -552,8 +553,9 @@ if __name__ == '__main__':
     # load dataset
     # please change it to your own datapath
     if args.data_path is None:
-        if args.dataset == 'animal10n':
-            args.data_path = 'data/animal10n'
+        if args.dataset == 'clothing1m':
+            # todo change the path for local env
+            args.data_path = 'data/clothing1m'
             args.num_class = 10
 
     curr_time = time.strftime("%m%d%H%M", time.localtime())
@@ -571,12 +573,11 @@ if __name__ == '__main__':
     warm_up = args.pretrain_ep
     # unique file name to record the synthetic noise for CIFAR-10/100
     time_digits = str(datetime.now())[-6:]
-    noise_file = 'No noise file for ANIMAL-10N'
-    loader = dataloader.animal10n_dataloader(
+    noise_file = 'No noise file for Clothing1M'
+    loader = dataloader.clothing1m_dataloader(
         args.dataset,
         noise_type=args.noise_type,
         noise_path=args.noise_path,
-        is_human=args.is_human,
         batch_size=args.batch_size,
         num_workers=8,
         root_dir=args.data_path,
@@ -596,7 +597,7 @@ if __name__ == '__main__':
         [{"params": dualnet.net1.parameters()}, {"params": dualnet.net2.parameters()}],
         lr=args.lr,
         momentum=0.9,
-        weight_decay=5e-4,
+        weight_decay=0.001,
     )
 
     fmix = FMix(size=(64, 64)) # modified for VGG19
