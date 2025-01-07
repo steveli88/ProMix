@@ -69,19 +69,6 @@ class animal10n_dataset(Dataset):
         if self.print_show:
             print(*args, **kwargs)
 
-    def load_label(self):
-        # NOTE only load manual training label
-        noise_label = torch.load(self.noise_path)
-        if isinstance(noise_label, dict):
-            if "clean_label" in noise_label.keys():
-                clean_label = torch.tensor(noise_label['clean_label'])
-                assert torch.sum(torch.tensor(self.train_labels) - clean_label) == 0
-                self.print_wrapper(f'Loaded {self.noise_type} from {self.noise_path}.')
-                self.print_wrapper(f'The overall noise rate is {1 - np.mean(clean_label.numpy() == noise_label[self.noise_type])}')
-            return noise_label[self.noise_type].reshape(-1)
-        else:
-            raise Exception('Input Error')
-
     def __getitem__(self, index):
         if self.mode == 'labeled':
             img, target, prob = self.train_data[index], self.noise_label[index], self.probability[index]
