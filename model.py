@@ -16,6 +16,9 @@ class DualNet(nn.Module):
         elif dataset == 'animal10n':
             self.net1 = vgg19_bn(num_classes=num_class, pretrained=False)
             self.net2 = vgg19_bn(num_classes=num_class, pretrained=False)
+        elif dataset == 'clothing1m':
+            self.net1 = ResNet50(num_classes=num_class, pretrained=True)
+            self.net2 = ResNet50(num_classes=num_class, pretrained=True)
 
     def forward(self,x):
         outputs_1 = self.net1(x)
