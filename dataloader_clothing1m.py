@@ -34,40 +34,38 @@ class clothing1m_dataset(Dataset):
         self.r = r
 
         self.root_dir = root_dir
-        self.train_data_path = []
-        self.train_labels = []
-        self.test_data_path = []
-        self.test_labels = []
+        self.train_labels = {}
+        self.test_labels = {}
 
-        with open('%s/noisy_label_kv.txt' % root_dir, 'r') as f:
+        with open('%s/noisy_label_kv.txt' % self.root_dir, 'r') as f:
             lines = f.read().splitlines()
             for l in lines:
                 entry = l.split()
-                img_path = '%s/' % root_dir + entry[0][7:]
-                self.train_data_path.append(img_path)
-                self.train_labels.append(int(entry[1]))
-        with open('%s/clean_label_kv.txt' % root_dir, 'r') as f:
+                img_path = entry[0][7:]
+                self.train_labels[img_path] = int(entry[1])
+        with open('%s/clean_label_kv.txt' % self.root_dir, 'r') as f:
             lines = f.read().splitlines()
             for l in lines:
                 entry = l.split()
-                img_path = '%s/' % root_dir + entry[0][7:]
-                self.test_data_path.append(img_path)
-                self.test_labels.append(int(entry[1]))
+                img_path = entry[0][7:]
+                self.test_labels[img_path] = int(entry[1])
 
         self.nb_classes = 14
 
         if self.mode == 'test':
-            self.test_imgs = []
-            with open('%s/clean_test_key_list.txt'%root_dir,'r') as f:
+            self.test_data_path = []
+            with open('%s/clean_test_key_list.txt' % self.root_dir, 'r') as f:
                 lines = f.read().splitlines()
                 for l in lines:
-                    entry = l.split()
-                    img_path = '%s/' % root_dir + entry[0][7:]
+                    img_path = l[7:]
                     self.test_data_path.append(img_path)
-                    self.test_labels.append(int(entry[1]))
         else:
-            # dummy place holder
-            self.noise_or_not = np.transpose(self.train_labels) != np.transpose(self.train_labels)
+            self.train_data_path = []
+            with open('%s/noisy_train_key_list.txt' % self.root_dir, 'r') as f:
+                lines = f.read().splitlines()
+                for i,l in enumerate(lines):
+                    img_path = l[7:]
+                    self.train_data_path.append(img_path)
 
             if self.mode == 'all_lab':
                 self.probability = probability
@@ -82,42 +80,40 @@ class clothing1m_dataset(Dataset):
                 elif self.mode == "unlabeled":
                     pred_idx = (1 - pred).nonzero()[0]
                 self.train_data_path = self.train_data_path[pred_idx]
-                self.noise_label = [self.noise_label[i] for i in pred_idx]
-                self.print_wrapper("%s data has a size of %d" % (self.mode, len(self.noise_label)))
-        self.print_show = False
-
-    def print_wrapper(self, *args, **kwargs):
-        if self.print_show:
-            print(*args, **kwargs)
+                self.noise_label = self.train_labels
 
     def __getitem__(self, index):
         if self.mode == 'labeled':
-            img_path, target, prob = self.train_data_path[index], self.noise_label[index], self.probability[index]
-            img = np.asarray(Image.open(os.path.join(self.root_dir, img_path)))
-            img = Image.fromarray(img)
+            img_path = self.train_data_path[index]
+            target = self.train_labels[img_path]
+            prob = self.probability[index]
+            img = Image.open(os.path.join(self.root_dir, 'images', img_path))
+            img = img.convert('RGB')
             img1 = self.transform(img)
             img2 = self.transform_s(img)
             return img1, img2, target, prob
         elif self.mode == 'unlabeled':
             img_path = self.train_data_path[index]
-            img = np.asarray(Image.open(os.path.join(self.root_dir, img_path)))
-            img = Image.fromarray(img)
+            img = Image.open(os.path.join(self.root_dir, 'images', img_path))
+            img = img.convert('RGB')
             img1 = self.transform(img)
             img2 = self.transform_s(img)
             return img1, img2
         elif self.mode == 'all_lab':
-            img_path, target, prob, prob2 = self.train_data_path[index], self.noise_label[index], self.probability[index], \
-            self.probability2[index]
-            true_labels = self.train_labels[index]
-            img = np.asarray(Image.open(os.path.join(self.root_dir, img_path)))
-            img = Image.fromarray(img)
+            img_path = self.train_data_path[index]
+            target = self.train_labels[img_path]
+            prob, prob2 = self.probability[index], self.probability2[index]
+            true_labels = self.train_labels[img_path]
+            img = Image.open(os.path.join(self.root_dir, 'images', img_path))
+            img = img.convert('RGB')
             img1 = self.transform(img)
             img2 = self.transform_s(img)
             return img1, img2, target, prob, prob2, true_labels, index
         elif self.mode == 'all':
-            img_path, target = self.train_data_path[index], self.noise_label[index]
-            img = np.asarray(Image.open(os.path.join(self.root_dir, img_path)))
-            img = Image.fromarray(img)
+            img_path = self.train_data_path[index]
+            target = self.train_labels[img_path]
+            img = Image.open(os.path.join(self.root_dir, 'images', img_path))
+            img = img.convert('RGB')
             if self.transform_s is not None:
                 img1 = self.transform(img)
                 img2 = self.transform_s(img)
@@ -126,16 +122,18 @@ class clothing1m_dataset(Dataset):
                 img = self.transform(img)
                 return img, target, index
         elif self.mode == 'all2':
-            img_path, target = self.train_data_path[index], self.noise_label[index]
-            img = np.asarray(Image.open(os.path.join(self.root_dir, img_path)))
-            img = Image.fromarray(img)
+            img_path = self.train_data_path[index]
+            target = self.train_labels[img_path]
+            img = Image.open(os.path.join(self.root_dir, 'images', img_path))
+            img = img.convert('RGB')
             img1 = self.transform(img)
             img2 = self.transform_s(img)
             return img1, img2, target, index
         elif self.mode == 'test':
-            img_path, target = self.test_data_path[index], self.test_labels[index]
-            img = np.asarray(Image.open(os.path.join(self.root_dir, img_path)))
-            img = Image.fromarray(img)
+            img_path = self.test_data_path[index]
+            target = self.test_labels[index]
+            img = Image.open(os.path.join(self.root_dir, 'images', img_path))
+            img = img.convert('RGB')
             img = self.transform(img)
             return img, target
 
@@ -268,5 +266,5 @@ class clothing1m_dataloader():
                 shuffle=False,
                 num_workers=self.num_workers,
             )
-            return eval_loader, eval_dataset.noise_or_not
+            return eval_loader
 
