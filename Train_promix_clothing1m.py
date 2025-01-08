@@ -363,8 +363,8 @@ def test(epoch, net1, net2, test_loader, test_log):
 def eval_train(model, rho, num_class, eval_loader, args, all_loss):
     w = linear_rampup2(epoch, args.warmup_ep)
     model.eval()
-    losses = torch.zeros(50000)
-    targets_list = torch.zeros(50000, dtype=torch.long)
+    losses = torch.zeros(len(eval_loader.dataset))
+    targets_list = torch.zeros(len(eval_loader.dataset), dtype=torch.long)
     with torch.no_grad():
         for batch_idx, (inputs, targets, index) in enumerate(eval_loader):
             inputs, targets = inputs.cuda(), targets.cuda()
@@ -599,12 +599,13 @@ if __name__ == '__main__':
     )
 
     # todo change this for clothing1m
-    fmix = FMix(size=(64, 64)) # modified for VGG19
+    fmix = FMix()
     CE = nn.CrossEntropyLoss(reduction='none')
     CEloss = nn.CrossEntropyLoss()
     CEsoft = CE_Soft_Label()
     eval_loader = loader.run('eval_train')
     test_loader = loader.run('test')
+    warmup_trainloader, noisy_labels = loader.run('warmup')
 
     all_loss = []
     rho = args.rho_start
@@ -618,9 +619,9 @@ if __name__ == '__main__':
 
     training_records = None
 
-    clean_sample_1 = np.zeros((len(eval_loader.dataset), args.num_epochs+1), dtype=int)
+    # clean_sample_1 = np.zeros((len(eval_loader.dataset), args.num_epochs+1), dtype=int)
     # clean_sample_2 = np.zeros((len(eval_loader.dataset), args.num_epochs+1), dtype=int)
-    clean_sample_cluster_1 = np.zeros((len(eval_loader.dataset), args.num_epochs+1), dtype=int)
+    # clean_sample_cluster_1 = np.zeros((len(eval_loader.dataset), args.num_epochs+1), dtype=int)
     # clean_sample_cluster_2 = np.zeros((len(eval_loader.dataset), args.num_epochs+1), dtype=int)
 
     for epoch in range(args.num_epochs + 1):
@@ -636,12 +637,12 @@ if __name__ == '__main__':
             prob2, all_loss = eval_train(dualnet.net2, rho, args.num_class, eval_loader, args, all_loss)
             pred1 = (prob1 > args.p_threshold)
 
-            clean_sample_1[:, epoch] = prob1
-            np.save(os.path.join(directory, 'clean_sample_1.npy'), clean_sample_1)
+            # clean_sample_1[:, epoch] = prob1
+            # np.save(os.path.join(directory, 'clean_sample_1.npy'), clean_sample_1)
             # clean_sample_2[:, epoch] = prob2
             # np.save(os.path.join(directory, 'clean_sample_2.npy'), clean_sample_2)       
 
-            prob1_before_expansion, prob2_before_expansion = prob1, prob2            
+            # prob1_before_expansion, prob2_before_expansion = prob1, prob2
 
             if epoch <= args.cluster_prior_epoch:
                 low_loss_idx_1 = torch.tensor(prob1 > args.p_threshold).cuda()
@@ -663,20 +664,20 @@ if __name__ == '__main__':
                 prob1 = (expanded_low_loss_idx_1 * 1.).cpu().numpy()
                 prob2 = (expanded_low_loss_idx_2 * 1.).cpu().numpy()
 
-                clean_sample_cluster_1[:, epoch] = prob1
-                np.save(os.path.join(directory, 'clean_sample_cluster_1.npy'), clean_sample_cluster_1)
+                # clean_sample_cluster_1[:, epoch] = prob1
+                # np.save(os.path.join(directory, 'clean_sample_cluster_1.npy'), clean_sample_cluster_1)
                 # clean_sample_cluster_2[:, epoch] = prob2
                 # np.save(os.path.join(directory, 'clean_sample_cluster_2.npy'), clean_sample_cluster_2)
 
             total_trainloader, noisy_labels = loader.run('train', pred1, prob1, prob2)  # co-divide
 
-            # Before expansion
-            stats_log.write('Before expansion\n')
-            low_loss_sample_stats(prob1_before_expansion, prob2_before_expansion, total_trainloader, noisy_labels, epoch, rho, selection_acc, stats_log)
-            # after expansion
-            stats_log.write('After expansion\n')
-            low_loss_sample_stats(prob1, prob2, total_trainloader, noisy_labels, epoch, rho, selection_acc, stats_log)
-            stats_log.write('\n')
+            # # Before expansion
+            # stats_log.write('Before expansion\n')
+            # low_loss_sample_stats(prob1_before_expansion, prob2_before_expansion, total_trainloader, noisy_labels, epoch, rho, selection_acc, stats_log)
+            # # after expansion
+            # stats_log.write('After expansion\n')
+            # low_loss_sample_stats(prob1, prob2, total_trainloader, noisy_labels, epoch, rho, selection_acc, stats_log)
+            # stats_log.write('\n')
 
             pi1, pi2, pi1_unrel, pi2_unrel = train(
                 epoch,

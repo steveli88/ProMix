@@ -363,8 +363,8 @@ def test(epoch, net1, net2, test_loader, test_log):
 def eval_train(model, rho, num_class, eval_loader, args, all_loss):
     w = linear_rampup2(epoch, args.warmup_ep)
     model.eval()
-    losses = torch.zeros(50000)
-    targets_list = torch.zeros(50000, dtype=torch.long)
+    losses = torch.zeros(len(eval_loader.dataset))
+    targets_list = torch.zeros(len(eval_loader.dataset), dtype=torch.long)
     with torch.no_grad():
         for batch_idx, (inputs, targets, index) in enumerate(eval_loader):
             inputs, targets = inputs.cuda(), targets.cuda()

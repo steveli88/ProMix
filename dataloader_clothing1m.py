@@ -199,7 +199,7 @@ class clothing1m_dataloader():
             )
             self.print_show = False
             # never show noisy rate again
-            return trainloader, all_dataset.train_noisy_labels
+            return trainloader, list(all_dataset.train_labels.values())
 
         elif mode == "train":
             labeled_dataset = clothing1m_dataset(
@@ -227,7 +227,7 @@ class clothing1m_dataloader():
                 drop_last=True,
             )
 
-            return labeled_trainloader, labeled_dataset.train_noisy_labels
+            return labeled_trainloader, list(labeled_dataset.train_labels.values())
 
         elif mode == "test":
             test_dataset = clothing1m_dataset(
