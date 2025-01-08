@@ -5,6 +5,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import Parameter
+from torchvision.models import ResNet50_Weights, resnet50
+
 from vgg import vgg19_bn
 
 class DualNet(nn.Module):
@@ -17,8 +19,8 @@ class DualNet(nn.Module):
             self.net1 = vgg19_bn(num_classes=num_class, pretrained=False)
             self.net2 = vgg19_bn(num_classes=num_class, pretrained=False)
         elif dataset == 'clothing1m':
-            self.net1 = ResNet50(num_classes=num_class, pretrained=True)
-            self.net2 = ResNet50(num_classes=num_class, pretrained=True)
+            self.net1 = ResNet50(num_classes=num_class)
+            self.net2 = ResNet50(num_classes=num_class)
 
     def forward(self,x):
         outputs_1 = self.net1(x)
