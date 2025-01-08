@@ -497,9 +497,9 @@ if __name__ == '__main__':
     parser.add_argument('--num_epochs', default=80, type=int)
     parser.add_argument('--seed', default=123)
     parser.add_argument('--gpuid', default=0, type=int)
-    parser.add_argument('--num_class', default=10, type=int)
+    parser.add_argument('--num_class', default=14, type=int)
     parser.add_argument('--data_path', default=None, type=str, help='path to dataset')
-    parser.add_argument('--dataset', default='animal10n', type=str)
+    parser.add_argument('--dataset', default='clothing1m', type=str)
     parser.add_argument('--is_human', action='store_true', default=False)
     parser.add_argument('--rho_range', default='0.2,0.6', type=str,
                         help='ratio of selecting clean labels (rho)')
@@ -552,11 +552,9 @@ if __name__ == '__main__':
     args.noise_type = noise_type_map[args.noise_type]
     # load dataset
     # please change it to your own datapath
-    if args.data_path is None:
-        if args.dataset == 'clothing1m':
-            # todo change the path for local env
-            args.data_path = 'data/clothing1m'
-            args.num_class = 10
+    if args.dataset == 'clothing1m':
+        args.data_path = '/home/lorentz/Project/Datasets/clothing1m'
+        args.num_class = 14
 
     curr_time = time.strftime("%m%d%H%M", time.localtime())
     directory = os.path.join('checkpoint', f'{curr_time}_{args.dataset}_{args.noise_mode}_{args.noise_rate}')
@@ -600,11 +598,12 @@ if __name__ == '__main__':
         weight_decay=0.001,
     )
 
+    # todo change this for clothing1m
     fmix = FMix(size=(64, 64)) # modified for VGG19
     CE = nn.CrossEntropyLoss(reduction='none')
     CEloss = nn.CrossEntropyLoss()
     CEsoft = CE_Soft_Label()
-    eval_loader, noise_or_not = loader.run('eval_train')
+    eval_loader = loader.run('eval_train')
     test_loader = loader.run('test')
 
     all_loss = []
