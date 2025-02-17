@@ -11,7 +11,7 @@ import os
 import argparse
 import numpy as np
 import dataloader_clothing1m as dataloader
-from model import *
+from model_clothing1m import *
 from utils.utils import *
 from utils.fmix import *
 from sklearn.mixture import GaussianMixture
@@ -501,11 +501,11 @@ if __name__ == '__main__':
     parser.add_argument('--data_path', default=None, type=str, help='path to dataset')
     parser.add_argument('--dataset', default='clothing1m', type=str)
     parser.add_argument('--is_human', action='store_true', default=False)
-    parser.add_argument('--rho_range', default='0.2,0.6', type=str,
+    parser.add_argument('--rho_range', default='0.7,0.7', type=str,
                         help='ratio of selecting clean labels (rho)')
     parser.add_argument('--tau', default=0.99, type=float,
                         help='high-confidence selection threshold')
-    parser.add_argument('--pretrain_ep', default=10, type=int, help = 'warm-up training epoch')
+    parser.add_argument('--pretrain_ep', default=1, type=int, help = 'warm-up training epoch')
     parser.add_argument('--warmup_ep', default=50, type=int, help = 'parameter ramp-up epoch')
     parser.add_argument('--low_conf_del', action='store_true', default=False)
     parser.add_argument('--threshold', default=0.9, type=float, help = 'threshold of label guessing')
@@ -521,11 +521,10 @@ if __name__ == '__main__':
     parser.add_argument('--bias_m', default=0.9999, type=float,
                         help='moving average parameter of bias estimation')
     parser.add_argument('--eps', default=1, type=float, help='Epsilon')
-    parser.add_argument('--cluster_prior_epoch', default=100, type=int)
-    # todo get cluster file and change this
-    parser.add_argument('--cluster_file', default='features_clusters_animal10_dinov2_vitl14_reg_f1024_c1000.pt',
+    parser.add_argument('--cluster_prior_epoch', default=80, type=int)
+    parser.add_argument('--cluster_file', default='features_clusters_clothing1m_dinov2_vits14_reg_f384_c14000.pt',
                         type=str, help='path to cluster file')
-    parser.add_argument('--num_cluster', default=1000, type=int)
+    parser.add_argument('--num_cluster', default=14000, type=int)
     args = parser.parse_args()
     [args.rho_start, args.rho_end] = [float(item) for item in args.rho_range.split(',')]
     print(args)
